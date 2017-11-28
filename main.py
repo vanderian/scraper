@@ -11,10 +11,12 @@ from urllib3.util import url
 class Scraper(object):
     urls = set()
     done = set()
+    images = set()
 
     def __init__(self):
         self.urls = set()
         self.done = set()
+        self.images = set()
 
     def get_input(self):
         parser = argparse.ArgumentParser(description='crawls website tree and downloads images')
@@ -23,7 +25,7 @@ class Scraper(object):
         self.urls = {args.base_url[0]}
 
     @staticmethod
-    def one_page_links(page_url):
+    def one_page_crawl(page_url):
         host = url.parse_url(page_url)
         host_prefix = host.scheme + "://" + host.hostname
 
@@ -38,15 +40,22 @@ class Scraper(object):
             urls = [x for x in links if str(x).startswith(host_prefix) and str(x)[-1] == '/']
             site_urls = [host_prefix + x for x in set(links) if str(x)[0] == '/' and str(x)[-1] == '/']
             urls.extend(site_urls)
-            return set(urls)
+
+            img = tree.xpath('//img/@src')
+            images = [urljoin(page_url, img_url) for img_url in img]
+
+            return set(urls), set(images)
 
     def get_links(self):
         if not self.urls:
-            return self.done
+            print("done, image links parsed:")
+            print(*self.images, sep='\n')
+            return self.images
 
         for page in self.urls.copy():
             print("on page: %s" % page)
-            links = Scraper.one_page_links(page)
+            links, images = Scraper.one_page_crawl(page)
+            self.images |= images
             self.done.add(page)
             self.urls.remove(page)
             self.urls |= links - self.done
@@ -88,4 +97,4 @@ def download_image(img_url):
 if __name__ == '__main__':
     scraper = Scraper()
     scraper.get_input()
-    scraper.get_links()
+    image_links = scraper.get_links()
