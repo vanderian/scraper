@@ -3,7 +3,6 @@ import os
 from urllib.parse import urljoin
 
 import requests
-from bs4 import BeautifulSoup
 from lxml import html
 from urllib3.util import url
 
@@ -41,14 +40,15 @@ class Scraper(object):
             site_urls = [host_prefix + x for x in set(links) if str(x)[0] == '/' and str(x)[-1] == '/']
             urls.extend(site_urls)
 
+            # todo extract and support other types
             img = tree.xpath('//img/@src')
-            images = [urljoin(page_url, img_url) for img_url in img]
+            images = [urljoin(page_url, img_url) for img_url in img if str(img_url).startswith('http')]
 
             return set(urls), set(images)
 
     def get_links(self):
         if not self.urls:
-            print("done, image links parsed:")
+            print("done, image links parsed: %d" % len(self.images))
             print(*self.images, sep='\n')
             return self.images
 
@@ -70,31 +70,33 @@ class Scraper(object):
         return self.get_links()
 
 
-def init_store():
-    directory = os.path.join(os.getcwd(), "images")
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    return directory
+class Store(object):
+    folder = None
 
+    def __init__(self):
+        self.folder = Store.init_store()
 
-def one_page_images(url):
-    page = requests.get(url)
-    tree = html.fromstring(page.content)
-    img = tree.xpath('//img/@src')
-    images = [urljoin(url, img_url) for img_url in img]
-    return list(set(images))
+    # todo exceptions
+    @staticmethod
+    def init_store():
+        directory = os.path.join(os.getcwd(), "images")
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        return directory
 
-
-def download_image(img_url):
-    img_request = requests.request('get', img_url)
-
-    img_content = img_request.content
-    with open(os.path.join(path, img_url.split('/')[-1]), 'wb') as f:
-        byte_image = bytes(img_content)
-        f.write(byte_image)
+    # todo exceptions
+    def download_images(self, image_urls):
+        for image_url in image_urls:
+            img_request = requests.request('get', image_url)
+            img_content = img_request.content
+            with open(os.path.join(self.folder, image_url.split('/')[-1]), 'wb') as f:
+                byte_image = bytes(img_content)
+                f.write(byte_image)
 
 
 if __name__ == '__main__':
     scraper = Scraper()
+    store = Store()
     scraper.get_input()
-    image_links = scraper.get_links()
+    store.download_images(scraper.get_links())
+
