@@ -87,11 +87,13 @@ class Store(object):
     # todo exceptions
     def download_images(self, image_urls):
         for image_url in image_urls:
+            print('downloading %s' % image_url)
             img_request = requests.request('get', image_url)
             img_content = img_request.content
             with open(os.path.join(self.folder, image_url.split('/')[-1]), 'wb') as f:
                 byte_image = bytes(img_content)
                 f.write(byte_image)
+            print("done")
 
 
 if __name__ == '__main__':
