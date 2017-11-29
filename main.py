@@ -1,9 +1,15 @@
 import argparse
+import concurrent
 import os
+from concurrent.futures._base import as_completed
+from concurrent.futures.thread import ThreadPoolExecutor
+from itertools import repeat
+from multiprocessing.pool import ThreadPool, Pool
 from urllib.parse import urljoin
 
 import requests
 from lxml import html
+from multiprocessing import cpu_count
 from urllib3.util import url
 
 
@@ -25,6 +31,7 @@ class Scraper(object):
 
     @staticmethod
     def one_page_crawl(page_url):
+        print("crawl on page: %s" % page_url)
         host = url.parse_url(page_url)
         host_prefix = host.scheme + "://" + host.hostname
 
@@ -52,47 +59,47 @@ class Scraper(object):
             print(*self.images, sep='\n')
             return self.images
 
-        for page in self.urls.copy():
-            print("on page: %s" % page)
-            links, images = Scraper.one_page_crawl(page)
-            self.images |= images
-            self.done.add(page)
-            self.urls.remove(page)
-            self.urls |= links - self.done
+        with ThreadPoolExecutor(cpu_count()) as executor:
+            future_to_page = {executor.submit(Scraper.one_page_crawl, page_url): page_url for page_url in self.urls}
+            for future in as_completed(future_to_page):
+                url_done = future_to_page[future]
+                links, images = future.result()
+                self.images |= images
+                self.done.add(url_done)
+                self.urls.remove(url_done)
+                self.urls |= links - self.done
 
-        # todo there must be a nicer way to write this
-        print("\n")
-        print("urls to crawl:")
-        print(self.urls)
-        print("urls done:")
-        print(self.done)
-        print("\n")
+        print("\nurls to crawl: %s\nurls done: %s\n" % (self.urls, self.done))
         return self.get_links()
 
 
 class Store(object):
-    folder = None
+    directory = None
 
     def __init__(self):
-        self.folder = Store.init_store()
+        self.directory = None
 
     # todo exceptions
-    @staticmethod
-    def init_store():
+    def init_store(self):
         directory = os.path.join(os.getcwd(), "images")
         if not os.path.exists(directory):
             os.makedirs(directory)
-        return directory
+        self.directory = directory
 
-    # todo exceptions
+    # todo exceptions, pool with a size num cores
     def download_images(self, image_urls):
-        for image_url in image_urls:
-            print('downloading %s' % image_url)
-            img_request = requests.request('get', image_url)
-            img_content = img_request.content
-            with open(os.path.join(self.folder, image_url.split('/')[-1]), 'wb') as f:
-                byte_image = bytes(img_content)
-                f.write(byte_image)
+        with ThreadPoolExecutor(cpu_count()) as executor:
+            for _ in executor.map(Store.download_image, repeat(self.directory), image_urls):
+                pass
+
+    @staticmethod
+    def download_image(folder, image_url):
+        print('downloading %s' % image_url)
+        img_request = requests.request('get', image_url)
+        img_content = img_request.content
+        with open(os.path.join(folder, image_url.split('/')[-1]), 'wb') as f:
+            byte_image = bytes(img_content)
+            f.write(byte_image)
             print("done")
 
 
@@ -100,5 +107,6 @@ if __name__ == '__main__':
     scraper = Scraper()
     store = Store()
     scraper.get_input()
+    store.init_store()
     store.download_images(scraper.get_links())
 
