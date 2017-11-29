@@ -86,7 +86,7 @@ class Store(object):
             os.makedirs(directory)
         self.directory = directory
 
-    # todo exceptions, pool with a size num cores
+    # todo exceptions
     def download_images(self, image_urls):
         with ThreadPoolExecutor(cpu_count()) as executor:
             for _ in executor.map(Store.download_image, repeat(self.directory), image_urls):

@@ -2,6 +2,5 @@
 a simple website crawler and image downloader
 
 ### todo
-* thread pool
-* errors
+* errorsgi
 * .css, base64, inline css style attr
